@@ -38,7 +38,6 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 705507994}
-  m_IndirectSpecularColor: {r: 0.44657844, g: 0.49641222, b: 0.57481676, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -303,8 +302,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.8, y: 0, z: 0}
-  m_LocalScale: {x: 8, y: 5, z: 6}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 16, y: 10, z: 12}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -339,21 +338,35 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _areaOffset: {x: 0.5, y: 0.25, z: 0.5}
   _areaCenterOffset: {x: 0, y: 0.125, z: 0}
-  _startTargetPoint: {x: 0, y: 10, z: 0}
   _area: {fileID: 483698721}
   _targetPrefab: {fileID: 6655324555017828013, guid: 988fc7576384347ad9fa33626041c4bc, type: 3}
   _fishPrefab: {fileID: 7984715341085350649, guid: 18ed688fa682d49218e259db6c4ca3e2, type: 3}
   _fishCount: 10
+  _initialFoodCount: 50
+  _manualAddFoodCount: 20
+  _consumeDistance: 0.35
+  _reproductionDistance: 1.25
+  _reproductionFoodRadius: 1
+  _reproductionCooldownSeconds: 2.5
+  _maxFishCount: 1000
+  _jobBatchSize: 64
+  _boundaryWeight: 2
+  _maxModeSeparationWeight: 2.2
+  _maxModeAlignmentWeight: 1.2
+  _maxModeCohesionWeight: 0.6
+  _maxModeForwardWeight: 0.5
   _fishData:
     _speed: 3
-    _avoidanceRadius: 2
-    _alignmentDistance: 5
+    _avoidanceRadius: 1
+    _alignmentDistance: 1
     _cohesionWeight: 1
     _cohesionRadius: 5
     _rotationSpeed: 2
     _stoppingMovingDistance: 1
     _stoppingReachDistance: 0.5
     _timeAtInterestPoint: 5
+    _spawnRate: 1
+    _reproductionRate: 0.5
 --- !u!4 &553431320
 Transform:
   m_ObjectHideFlags: 0
@@ -549,7 +562,7 @@ Transform:
   m_GameObject: {fileID: 963194225}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -8}
+  m_LocalPosition: {x: 0, y: 0, z: -16}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

@@ -44,6 +44,14 @@ public struct MoveJob : IJobParallelFor
   public float deltaTime;
   [ReadOnly]
   public float BoundaryWeight;
+  [ReadOnly]
+  public float MaxModeSeparationWeight;
+  [ReadOnly]
+  public float MaxModeAlignmentWeight;
+  [ReadOnly]
+  public float MaxModeCohesionWeight;
+  [ReadOnly]
+  public float MaxModeForwardWeight;
 
   [ReadOnly]
   public Vector3 AreaCenter;
@@ -115,7 +123,8 @@ public struct MoveJob : IJobParallelFor
             if (distance < AvoidanceRadius)
             {
               Vector3 avoidVector = myPosition - otherPosition;
-              avoidanceMove += avoidVector.normalized;
+              float safeDistance = math.max(distance, 0.05f);
+              avoidanceMove += avoidVector / (safeDistance * safeDistance);
             }
 
             if (distance < AlignmentDistance)
@@ -174,8 +183,24 @@ public struct MoveJob : IJobParallelFor
     if (distToMinZ < boundaryMargin) boundarySteer.z += (boundaryMargin - distToMinZ) / boundaryMargin;
     if (distToMaxZ < boundaryMargin) boundarySteer.z -= (boundaryMargin - distToMaxZ) / boundaryMargin;
 
-    Vector3 targetDirection = (closestPoint - myPosition).normalized;
-    Vector3 moveDirection = targetDirection + avoidanceMove + alignmentMove + cohesionMove.normalized * CohesionWeight + boundarySteer * BoundaryWeight;
+    Vector3 targetDirection = IgnoreTargets ? Vector3.zero : (closestPoint - myPosition).normalized;
+    Vector3 forwardMomentum = myRotation * Vector3.forward;
+    Vector3 cohesionDirection = cohesionMove == Vector3.zero ? Vector3.zero : cohesionMove.normalized * CohesionWeight;
+
+    Vector3 moveDirection;
+    if (IgnoreTargets)
+    {
+      // SebLague-like flock movement mode used only when max fish count is reached.
+      moveDirection = avoidanceMove * MaxModeSeparationWeight
+                      + alignmentMove * MaxModeAlignmentWeight
+                      + cohesionDirection * MaxModeCohesionWeight
+                      + forwardMomentum * MaxModeForwardWeight
+                      + boundarySteer * BoundaryWeight;
+    }
+    else
+    {
+      moveDirection = targetDirection + avoidanceMove + alignmentMove + cohesionDirection + boundarySteer * BoundaryWeight;
+    }
     if (moveDirection == Vector3.zero)
     {
       moveDirection = myRotation * Vector3.forward;

@@ -43,11 +43,22 @@ public class GameManager : MonoBehaviour
   [SerializeField]
   private int _jobBatchSize = 64;
   [SerializeField]
+  private float _boundaryWeight = 2.0f;
+  [SerializeField]
+  private float _maxModeSeparationWeight = 2.2f;
+  [SerializeField]
+  private float _maxModeAlignmentWeight = 1.2f;
+  [SerializeField]
+  private float _maxModeCohesionWeight = 0.6f;
+  [SerializeField]
+  private float _maxModeForwardWeight = 0.5f;
+  [SerializeField]
   private FishData _fishData;
 
   private int _targetCount;
   private int _activeTargetCount;
   private float _foodSpawnAccumulator;
+  private bool _wasAtMaxPopulation;
 
   private NativeArray<Vector3> _position;
   private NativeArray<Vector3> _nextPosition;
@@ -132,18 +143,29 @@ public class GameManager : MonoBehaviour
       _reproductionCooldownTimers[i] = Mathf.Max(0f, _reproductionCooldownTimers[i] - Time.deltaTime);
     }
 
-    _foodSpawnAccumulator += Mathf.Max(_fishData.SpawnRate, 0f) * Time.deltaTime;
-    int foodToSpawn = Mathf.FloorToInt(_foodSpawnAccumulator);
-    if (foodToSpawn > 0)
-    {
-      AddTargets(foodToSpawn);
-      _foodSpawnAccumulator -= foodToSpawn;
-    }
-
     EnsureGridCapacity();
     float cellSize = GetGridCellSize();
     int batchSize = Mathf.Max(1, _jobBatchSize);
     bool isAtMaxPopulation = _fishCount >= _maxFishCount;
+
+    if (isAtMaxPopulation && !_wasAtMaxPopulation)
+    {
+      _foodSpawnAccumulator = 0f;
+      ClearAllFood();
+    }
+
+    _wasAtMaxPopulation = isAtMaxPopulation;
+
+    if (!isAtMaxPopulation)
+    {
+      _foodSpawnAccumulator += Mathf.Max(_fishData.SpawnRate, 0f) * Time.deltaTime;
+      int foodToSpawn = Mathf.FloorToInt(_foodSpawnAccumulator);
+      if (foodToSpawn > 0)
+      {
+        AddTargets(foodToSpawn);
+        _foodSpawnAccumulator -= foodToSpawn;
+      }
+    }
     _spatialGrid.Clear();
 
     BuildSpatialGridJob buildGridJob = new BuildSpatialGridJob
@@ -175,7 +197,11 @@ public class GameManager : MonoBehaviour
       CohesionWeight = _fishData.CohesionWeight,
       Speed = _fishData.Speed,
       RotationSpeed = _fishData.RotationSpeed,
-      BoundaryWeight = 2.0f,
+      BoundaryWeight = _boundaryWeight,
+      MaxModeSeparationWeight = _maxModeSeparationWeight,
+      MaxModeAlignmentWeight = _maxModeAlignmentWeight,
+      MaxModeCohesionWeight = _maxModeCohesionWeight,
+      MaxModeForwardWeight = _maxModeForwardWeight,
       AreaCenter = AreaCenter,
       AreaSize = AreaSize,
       deltaTime = Time.deltaTime
@@ -263,6 +289,11 @@ public class GameManager : MonoBehaviour
 
   public void AddTwentyTargets()
   {
+    if (_fishCount >= _maxFishCount)
+    {
+      return;
+    }
+
     AddTargets(_manualAddFoodCount);
   }
 
@@ -371,6 +402,23 @@ public class GameManager : MonoBehaviour
   {
     _targetActive[i] = true;
     _targetPositions[i] = _targetTransforms[i].position;
+  }
+
+  private void ClearAllFood()
+  {
+    for (int i = 0; i < _targetCount; i++)
+    {
+      if (!_targetActive[i])
+      {
+        continue;
+      }
+
+      _targetActive[i] = false;
+      _targetTransforms[i].gameObject.SetActive(false);
+    }
+
+    _activeTargetCount = 0;
+    OnUpdateFeed?.Invoke(_activeTargetCount);
   }
 
   private void ProcessFoodAndReproduction()
