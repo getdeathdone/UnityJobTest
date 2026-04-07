@@ -10,7 +10,9 @@ public enum FishParameter
   RotationSpeed,
   StoppingMovingDistance,
   StoppingReachDistance,
-  TimeAtInterestPoint
+  TimeAtInterestPoint,
+  SpawnRate,
+  ReproductionRate
 }
 
 [Serializable]
@@ -42,6 +44,10 @@ public class FishData
 
   [SerializeField, Range(FishDataConstants.MIN_TIME_AT_INTEREST_POINT, FishDataConstants.MAX_TIME_AT_INTEREST_POINT)]
   private float _timeAtInterestPoint = 5f;
+  [SerializeField, Range(FishDataConstants.MIN_SPAWN_RATE, FishDataConstants.MAX_SPAWN_RATE)]
+  private float _spawnRate = 1f;
+  [SerializeField, Range(FishDataConstants.MIN_REPRODUCTION_RATE, FishDataConstants.MAX_REPRODUCTION_RATE)]
+  private float _reproductionRate = 0.5f;
 
   public float GetParameter (FishParameter parameter)
   {
@@ -56,6 +62,8 @@ public class FishData
       FishParameter.StoppingMovingDistance => _stoppingMovingDistance,
       FishParameter.StoppingReachDistance => _stoppingReachDistance,
       FishParameter.TimeAtInterestPoint => _timeAtInterestPoint,
+      FishParameter.SpawnRate => _spawnRate,
+      FishParameter.ReproductionRate => _reproductionRate,
       _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter, null)
     };
   }
@@ -91,6 +99,12 @@ public class FishData
       case FishParameter.TimeAtInterestPoint:
         _timeAtInterestPoint = value;
         break;
+      case FishParameter.SpawnRate:
+        _spawnRate = value;
+        break;
+      case FishParameter.ReproductionRate:
+        _reproductionRate = value;
+        break;
       default:
         throw new ArgumentOutOfRangeException(nameof(parameter), parameter, null);
     }
@@ -105,4 +119,6 @@ public class FishData
   public float StoppingMovingDistance => _stoppingMovingDistance;
   public float StoppingReachDistance => _stoppingReachDistance;
   public float TimeAtInterestPoint => _timeAtInterestPoint;
+  public float SpawnRate => _spawnRate;
+  public float ReproductionRate => _reproductionRate;
 }

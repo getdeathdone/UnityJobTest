@@ -1,28 +1,32 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
+
 [BurstCompile]
 public struct MoveJob : IJobParallelFor
 {
-  [NativeDisableParallelForRestriction]
+  [ReadOnly]
   public NativeArray<Vector3> FishPositions;
-  [NativeDisableParallelForRestriction]
+  [ReadOnly]
   public NativeArray<Quaternion> FishRotation;
-  [NativeDisableParallelForRestriction]
-  public NativeArray<bool> MovingToInterestPoint;
-  [NativeDisableParallelForRestriction]
-  public NativeArray<bool> ReachToInterestPoints;
+  [ReadOnly]
+  public NativeArray<int3> FishCells;
+  [ReadOnly]
+  public NativeParallelMultiHashMap<int3, int> SpatialGrid;
 
-  [NativeDisableParallelForRestriction]
+  public NativeArray<Vector3> NewFishPositions;
+  public NativeArray<Quaternion> NewFishRotation;
   public NativeArray<Vector3> FishTargetPositions;
-  [NativeDisableParallelForRestriction]
   public NativeArray<int> FishTargetIndex;
 
-  [ReadOnly, NativeDisableParallelForRestriction]
+  [ReadOnly]
   public NativeArray<Vector3> TargetPositions;
-  [ReadOnly, NativeDisableParallelForRestriction]
+  [ReadOnly]
   public NativeArray<bool> TargetActive;
+  [ReadOnly]
+  public bool IgnoreTargets;
 
   [ReadOnly]
   public float AvoidanceRadius;
@@ -31,10 +35,6 @@ public struct MoveJob : IJobParallelFor
   [ReadOnly]
   public float CohesionRadius;
   [ReadOnly]
-  public float StoppingReachDistance;
-  [ReadOnly]
-  public float StoppingMovingDistance;
-  [ReadOnly]
   public float CohesionWeight;
   [ReadOnly]
   public float Speed;
@@ -42,6 +42,8 @@ public struct MoveJob : IJobParallelFor
   public float RotationSpeed;
   [ReadOnly]
   public float deltaTime;
+  [ReadOnly]
+  public float BoundaryWeight;
 
   [ReadOnly]
   public Vector3 AreaCenter;
@@ -50,106 +52,159 @@ public struct MoveJob : IJobParallelFor
 
   public void Execute (int index)
   {
+    Vector3 myPosition = FishPositions[index];
+    Quaternion myRotation = FishRotation[index];
+
     float closestDistance = float.MaxValue;
-    Vector3 closestPoint = Vector3.zero;
+    Vector3 closestPoint = AreaCenter;
+    int closestTargetIndex = -1;
 
-    for (int i = 0; i < TargetPositions.Length; i++)
+    if (!IgnoreTargets)
     {
-      if (!TargetActive[i])
+      for (int i = 0; i < TargetPositions.Length; i++)
       {
-        continue;
-      }
+        if (!TargetActive[i])
+        {
+          continue;
+        }
 
-      float distance = Vector3.Distance(FishPositions[index], TargetPositions[i]);
+        float distance = Vector3.Distance(myPosition, TargetPositions[i]);
 
-      if (distance < closestDistance)
-      {
-        FishTargetIndex[index] = i;
-        closestPoint = TargetPositions[i];
-        closestDistance = distance;
+        if (distance < closestDistance)
+        {
+          closestTargetIndex = i;
+          closestPoint = TargetPositions[i];
+          closestDistance = distance;
+        }
       }
     }
 
+    FishTargetIndex[index] = closestTargetIndex;
     FishTargetPositions[index] = closestPoint;
 
     Vector3 avoidanceMove = Vector3.zero;
     Vector3 alignmentMove = Vector3.zero;
     Vector3 cohesionMove = Vector3.zero;
+    int alignmentCount = 0;
+    int cohesionCount = 0;
 
-    for (int i = 0; i < FishPositions.Length; i++)
+    int3 myCell = FishCells[index];
+    for (int x = -1; x <= 1; x++)
     {
-      if (i == index)
+      for (int y = -1; y <= 1; y++)
       {
-        continue;
-      }
+        for (int z = -1; z <= 1; z++)
+        {
+          int3 cell = new int3(myCell.x + x, myCell.y + y, myCell.z + z);
 
-      if (MovingToInterestPoint[i])
-      {
-        continue;
-      }
+          if (!SpatialGrid.TryGetFirstValue(cell, out int fishIndex, out NativeParallelMultiHashMapIterator<int3> iterator))
+          {
+            continue;
+          }
 
-      float distance = Vector3.Distance(FishPositions[index], FishPositions[i]);
+          do
+          {
+            if (fishIndex == index)
+            {
+              continue;
+            }
 
-      if (distance < AvoidanceRadius)
-      {
-        Vector3 avoidVector = FishPositions[index] - FishPositions[i];
-        avoidanceMove += avoidVector.normalized;
-      }
+            Vector3 otherPosition = FishPositions[fishIndex];
+            float distance = Vector3.Distance(myPosition, otherPosition);
 
-      if (distance < AlignmentDistance)
-      {
-        alignmentMove += FishRotation[i] * Vector3.forward;
-      }
+            if (distance < AvoidanceRadius)
+            {
+              Vector3 avoidVector = myPosition - otherPosition;
+              avoidanceMove += avoidVector.normalized;
+            }
 
-      if (distance < CohesionRadius)
-      {
-        cohesionMove += FishPositions[i];
+            if (distance < AlignmentDistance)
+            {
+              alignmentMove += FishRotation[fishIndex] * Vector3.forward;
+              alignmentCount++;
+            }
+
+            if (distance < CohesionRadius)
+            {
+              cohesionMove += otherPosition;
+              cohesionCount++;
+            }
+          } while (SpatialGrid.TryGetNextValue(out fishIndex, ref iterator));
+        }
       }
     }
 
-    if (cohesionMove != Vector3.zero)
+    if (alignmentCount > 0)
     {
-      cohesionMove /= FishPositions.Length;
-      cohesionMove -= FishPositions[index];
+      alignmentMove /= alignmentCount;
     }
 
-    Vector3 targetDirection = (FishTargetPositions[index] - FishPositions[index]).normalized;
-
-    float distanceToTarget = Vector3.Distance(FishPositions[index], FishTargetPositions[index]);
-    ReachToInterestPoints[index] = distanceToTarget <= StoppingReachDistance;
-    MovingToInterestPoint[index] = distanceToTarget <= StoppingMovingDistance;
-
-    Vector3 moveDirection = MovingToInterestPoint[index] ? targetDirection : targetDirection + avoidanceMove + alignmentMove + cohesionMove.normalized * CohesionWeight;
-
-    Vector3 newPosition = FishPositions[index] + moveDirection.normalized * Speed * deltaTime;
+    if (cohesionCount > 0)
+    {
+      cohesionMove /= cohesionCount;
+      cohesionMove -= myPosition;
+    }
 
     float halfX = AreaSize.x / 2;
     float halfY = AreaSize.y / 2;
     float halfZ = AreaSize.z / 2;
 
-    if (newPosition.x < AreaCenter.x - halfX || newPosition.x > AreaCenter.x + halfX)
+    float minX = AreaCenter.x - halfX;
+    float maxX = AreaCenter.x + halfX;
+    float minY = AreaCenter.y - halfY;
+    float maxY = AreaCenter.y + halfY;
+    float minZ = AreaCenter.z - halfZ;
+    float maxZ = AreaCenter.z + halfZ;
+
+    float boundaryMargin = math.max(math.min(halfX, math.min(halfY, halfZ)) * 0.2f, 0.2f);
+    Vector3 boundarySteer = Vector3.zero;
+
+    float distToMinX = myPosition.x - minX;
+    float distToMaxX = maxX - myPosition.x;
+    if (distToMinX < boundaryMargin) boundarySteer.x += (boundaryMargin - distToMinX) / boundaryMargin;
+    if (distToMaxX < boundaryMargin) boundarySteer.x -= (boundaryMargin - distToMaxX) / boundaryMargin;
+
+    float distToMinY = myPosition.y - minY;
+    float distToMaxY = maxY - myPosition.y;
+    if (distToMinY < boundaryMargin) boundarySteer.y += (boundaryMargin - distToMinY) / boundaryMargin;
+    if (distToMaxY < boundaryMargin) boundarySteer.y -= (boundaryMargin - distToMaxY) / boundaryMargin;
+
+    float distToMinZ = myPosition.z - minZ;
+    float distToMaxZ = maxZ - myPosition.z;
+    if (distToMinZ < boundaryMargin) boundarySteer.z += (boundaryMargin - distToMinZ) / boundaryMargin;
+    if (distToMaxZ < boundaryMargin) boundarySteer.z -= (boundaryMargin - distToMaxZ) / boundaryMargin;
+
+    Vector3 targetDirection = (closestPoint - myPosition).normalized;
+    Vector3 moveDirection = targetDirection + avoidanceMove + alignmentMove + cohesionMove.normalized * CohesionWeight + boundarySteer * BoundaryWeight;
+    if (moveDirection == Vector3.zero)
     {
-      newPosition.x = Mathf.Clamp(newPosition.x, AreaCenter.x - halfX, AreaCenter.x + halfX);
-      moveDirection.x *= -1;
+      moveDirection = myRotation * Vector3.forward;
     }
 
-    if (newPosition.y < AreaCenter.y - halfY || newPosition.y > AreaCenter.y + halfY)
+    Vector3 newPosition = myPosition + moveDirection.normalized * Speed * deltaTime;
+    newPosition.x = Mathf.Clamp(newPosition.x, minX, maxX);
+    newPosition.y = Mathf.Clamp(newPosition.y, minY, maxY);
+    newPosition.z = Mathf.Clamp(newPosition.z, minZ, maxZ);
+
+    Vector3 correctedDirection = newPosition - myPosition;
+    if (correctedDirection.sqrMagnitude > 0.0001f)
     {
-      newPosition.y = Mathf.Clamp(newPosition.y, AreaCenter.y - halfY, AreaCenter.y + halfY);
-      moveDirection.y *= -1;
+      moveDirection = correctedDirection.normalized;
+    }
+    else
+    {
+      moveDirection = (AreaCenter - myPosition).normalized;
+      if (moveDirection == Vector3.zero)
+      {
+        moveDirection = myRotation * Vector3.forward;
+      }
     }
 
-    if (newPosition.z < AreaCenter.z - halfZ || newPosition.z > AreaCenter.z + halfZ)
-    {
-      newPosition.z = Mathf.Clamp(newPosition.z, AreaCenter.z - halfZ, AreaCenter.z + halfZ);
-      moveDirection.z *= -1;
-    }
-
-    FishPositions[index] = newPosition;
+    NewFishPositions[index] = newPosition;
 
     Quaternion targetRotation = Quaternion.LookRotation(moveDirection.normalized);
-    Quaternion rotation = Quaternion.Slerp(FishRotation[index], targetRotation, RotationSpeed * deltaTime);
+    Quaternion rotation = Quaternion.Slerp(myRotation, targetRotation, RotationSpeed * deltaTime);
 
-    FishRotation[index] = rotation;
+    NewFishRotation[index] = rotation;
   }
 }

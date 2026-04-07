@@ -67,6 +67,8 @@ public class UIManager : MonoBehaviour
     SetSliderMinMax(_sliders[FishParameter.StoppingMovingDistance], FishDataConstants.MIN_STOPPING_MOVING_DISTANCE, FishDataConstants.MAX_STOPPING_MOVING_DISTANCE);
     SetSliderMinMax(_sliders[FishParameter.StoppingReachDistance], FishDataConstants.MIN_STOPPING_REACH_DISTANCE, FishDataConstants.MAX_STOPPING_REACH_DISTANCE);
     SetSliderMinMax(_sliders[FishParameter.TimeAtInterestPoint], FishDataConstants.MIN_TIME_AT_INTEREST_POINT, FishDataConstants.MAX_TIME_AT_INTEREST_POINT);
+    SetSliderMinMax(_sliders[FishParameter.SpawnRate], FishDataConstants.MIN_SPAWN_RATE, FishDataConstants.MAX_SPAWN_RATE);
+    SetSliderMinMax(_sliders[FishParameter.ReproductionRate], FishDataConstants.MIN_REPRODUCTION_RATE, FishDataConstants.MAX_REPRODUCTION_RATE);
 
     void SetSliderMinMax (Slider slider, float min, float max)
     {
